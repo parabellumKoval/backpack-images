@@ -157,7 +157,8 @@ trait HasImages
     {
         $attribute = static::imageAttributeName();
         $normalized = $this->normalizeImages($value);
-        $this->attributes[$attribute] = json_encode($normalized, JSON_UNESCAPED_UNICODE);
+        $processed = $this->processImagesBeforeSaving($normalized);
+        $this->attributes[$attribute] = json_encode($processed, JSON_UNESCAPED_UNICODE);
     }
 
     public function getImagesCollection(): Collection
@@ -236,6 +237,80 @@ trait HasImages
         return [];
     }
 
+    protected function processImagesBeforeSaving(array $images): array
+    {
+        $options = static::imageUploadOptions();
+        $prefix = static::imageFieldPrefix();
+
+        return collect($images)
+            ->map(fn (array $image) => $this->processSingleImage($image, $options, $prefix))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    protected function processSingleImage(array $image, ImageUploadOptions $options, string $prefix): ?array
+    {
+        if (!array_key_exists('src', $image)) {
+            return $image;
+        }
+
+        $src = trim((string) $image['src']);
+
+        if ($src === '') {
+            $image['src'] = '';
+
+            return $image;
+        }
+
+        if ($this->isBase64Image($src)) {
+            $stored = $this->imageUploader()->uploadFromBase64($src, $options);
+            $image['src'] = $stored->path;
+
+            return $image;
+        }
+
+        $image['src'] = $this->normalizeStoredImagePath($src, $prefix);
+
+        return $image;
+    }
+
+    protected function isBase64Image(string $value): bool
+    {
+        return str_starts_with($value, 'data:') && str_contains($value, ';base64,');
+    }
+
+    protected function normalizeStoredImagePath(string $path, string $prefix): string
+    {
+        $path = trim($path);
+
+        if ($path === '') {
+            return '';
+        }
+
+        if (preg_match('#^https?://#i', $path)) {
+            if ($prefix !== '') {
+                $normalizedPrefix = rtrim($prefix, '/');
+
+                if ($normalizedPrefix !== '' && str_starts_with($path, $normalizedPrefix)) {
+                    $path = substr($path, strlen($normalizedPrefix));
+                }
+            }
+
+            return ltrim($path, '/');
+        }
+
+        if ($prefix !== '') {
+            $normalizedPrefix = rtrim($prefix, '/');
+
+            if ($normalizedPrefix !== '' && str_starts_with($path, $normalizedPrefix)) {
+                $path = substr($path, strlen($normalizedPrefix));
+            }
+        }
+
+        return ltrim($path, '/');
+    }
+
     protected function pluckImageAttribute(string $key, ?int $limit = null): array
     {
         $collection = $this->getImagesCollection();
@@ -258,6 +333,10 @@ trait HasImages
 
     protected static function formatImageUrl(string $path, string $prefix): string
     {
+        if (preg_match('#^https?://#i', $path)) {
+            return $path;
+        }
+
         $path = ltrim($path, '/');
         $prefix = rtrim($prefix, '/');
 
