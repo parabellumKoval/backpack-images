@@ -49,7 +49,7 @@ class BackpackImagesServiceProvider extends ServiceProvider
             __DIR__ . '/../config/backpack-images.php' => config_path('backpack-images.php'),
         ], 'backpack-images-config');
 
-        $this->loadViewsFrom(__DIR__ . '/resources/views', 'backpack-images');
+        // $this->loadViewsFrom(__DIR__ . '/resources/views', 'backpack-images');
 
         $this->loadTranslationsFrom(__DIR__.'/resources/lang', 'images');
     }
